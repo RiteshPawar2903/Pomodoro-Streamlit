@@ -145,7 +145,7 @@ body {{
 
 <script type="module">
 import {{ initializeApp, getApps, getApp }} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
-import {{ getAuth, GoogleAuthProvider, signInWithPopup, signOut }} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import {{ getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 
 const firebaseConfig = {fb_config_json};
 const currentUser = {user_json};
@@ -168,6 +168,13 @@ if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {{
     const auth = getAuth(app);
     const googleProvider = new GoogleAuthProvider();
     googleProvider.setCustomParameters({{ prompt: 'select_account' }});
+
+    async function completeSignIn(user) {{
+        const idToken = await user.getIdToken();
+        if (window.parent && window.parent.location) {{
+            window.parent.location.search = `?auth_token=${{encodeURIComponent(idToken)}}`;
+        }}
+    }}
 
     function render() {{
         container.innerHTML = '';
@@ -219,11 +226,7 @@ if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {{
                 try {{
                     loginBtn.innerHTML = '<span>Connecting...</span>';
                     const result = await signInWithPopup(auth, googleProvider);
-                    const u = result.user;
-                    const search = `?auth_action=login&uid=${{encodeURIComponent(u.uid)}}&email=${{encodeURIComponent(u.email || '')}}&name=${{encodeURIComponent(u.displayName || '')}}&photo=${{encodeURIComponent(u.photoURL || '')}}`;
-                    if (window.parent && window.parent.location) {{
-                        window.parent.location.search = search;
-                    }}
+                    await completeSignIn(result.user);
                 }} catch(err) {{
                     console.error("Sign-in error:", err);
                     const frameHost = window.location.hostname || "unknown";
@@ -260,7 +263,16 @@ if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {{
         }}
     }}
 
-    render();
+    onAuthStateChanged(auth, (user) => {{
+        if (user && !currentUser) {{
+            completeSignIn(user).catch((err) => {{
+                console.error("Firebase session restore error:", err);
+                render();
+            }});
+        }} else {{
+            render();
+        }}
+    }});
 }}
 </script>
 </body>

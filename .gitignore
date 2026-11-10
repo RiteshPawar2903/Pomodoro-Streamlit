@@ -1,0 +1,3 @@
+.streamlit/secrets.toml
+firebase-service-account.json
+data/firebase-service-account.json

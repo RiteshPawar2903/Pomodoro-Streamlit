@@ -579,11 +579,14 @@ class FirestoreStorageEngine:
             from firebase_admin import credentials, firestore
 
             service_account_dict = CONFIG.get_firebase_service_account()
-            if service_account_dict:
-                cred = credentials.Certificate(service_account_dict)
-                app = firebase_admin.initialize_app(cred)
-            else:
-                app = firebase_admin.initialize_app()
+            try:
+                app = firebase_admin.get_app()
+            except ValueError:
+                if service_account_dict:
+                    cred = credentials.Certificate(service_account_dict)
+                    app = firebase_admin.initialize_app(cred)
+                else:
+                    app = firebase_admin.initialize_app()
 
             cls._client = firestore.client(app=app)
             logger.info("Firestore client initialized successfully for production persistence.")

@@ -50,3 +50,33 @@ streamlit run app.py
 ```bash
 python -m unittest tests/test_zen_pomodoro.py
 ```
+
+## Firebase Google Sign-In
+
+The app uses Firebase Authentication with Google as the provider. Enable Google
+under **Firebase Console -> Authentication -> Sign-in method**, and add the
+local/deployed hostname under **Authorized domains**.
+
+Create `.streamlit/secrets.toml` locally or add the same values to Streamlit
+Cloud Secrets:
+
+```toml
+[firebase]
+projectId = "your-firebase-project-id"
+apiKey = "your-web-api-key"
+authDomain = "your-firebase-project-id.firebaseapp.com"
+appId = "your-firebase-app-id"
+
+[firebase_service_account]
+type = "service_account"
+project_id = "your-firebase-project-id"
+private_key_id = "..."
+private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+client_email = "firebase-adminsdk-...@your-firebase-project-id.iam.gserviceaccount.com"
+client_id = "..."
+```
+
+The browser signs in with Firebase and sends an ID token to the app. The
+server verifies that token with the Firebase Admin SDK before creating the
+Streamlit user session. Never commit `secrets.toml` or the service-account
+private key.
