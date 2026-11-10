@@ -741,7 +741,7 @@ class StorageEngine:
     def get_active_backend(cls) -> str:
         if CONFIG.storage_backend == "firestore":
             return "firestore"
-        if CONFIG.storage_backend == "sqlite":
+        if CONFIG.storage_backend == "sqlite" or CONFIG.env in ("test", "testing"):
             return "sqlite"
         if FirestoreStorageEngine.is_available():
             return "firestore"

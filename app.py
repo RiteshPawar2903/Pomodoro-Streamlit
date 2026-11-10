@@ -33,7 +33,7 @@ from models import (
     UserProfile,
     UserSettings,
 )
-from storage import LocalStorage
+from storage import LocalStorage, StorageEngine
 from themes import THEMES, get_theme_css
 from timer_controller import TimerController
 
@@ -88,7 +88,18 @@ if "last_tick_time" not in st.session_state:
     st.session_state.last_tick_time = time.time()
 
 
-# 3. Synchronize Actions from Client Component (Firebase Auth & Session Sync via query params)
+# 3. Synchronize Actions & OpenID Connect Authentication
+if hasattr(st, "user") and hasattr(st.user, "is_logged_in") and st.user.is_logged_in:
+    current_google_uid = getattr(st.user, "sub", getattr(st.user, "email", "google_user"))
+    if not st.session_state.user or st.session_state.user.uid != current_google_uid:
+        st.session_state.user = UserProfile(
+            uid=current_google_uid,
+            email=getattr(st.user, "email", ""),
+            displayName=getattr(st.user, "name", "Zen User"),
+            photoURL=getattr(st.user, "picture", None),
+        )
+        st.session_state.settings = LocalStorage.get_settings(user_id=current_google_uid)
+
 if "auth_action" in st.query_params:
     auth_act = st.query_params.get("auth_action")
     if auth_act == "login":
@@ -235,10 +246,57 @@ if st.session_state.is_focus_mode:
 
 
 # -------------------------------------------------------------
-# 7. STANDARD WORKSPACE VIEW
+# 7. GOOGLE AUTHENTICATION MODAL & HEADER WORKSPACE VIEW
 # -------------------------------------------------------------
 
-# Top Header Bar with Firebase Google Auth Integration
+if hasattr(st, "dialog"):
+    @st.dialog("Google Authentication Setup & Diagnostic")
+    def render_oauth_setup_dialog():
+        st.markdown("""
+        ### 🔑 Direct Google Authentication (Zero-Iframe Mode)
+        In modern browsers, rendering OAuth popups inside sandboxed HTML iframes produces a `null` origin, which triggers `auth/unauthorized-domain`.
+        
+        Streamlit 1.55+ authenticates directly in the top-level window via **Google OpenID Connect**.
+
+        #### 2-Minute Google Cloud Console Configuration:
+        1. Open [Google Cloud Console](https://console.cloud.google.com/) for project **pomodoro-streamlit**.
+        2. Go to **APIs & Services** → **Credentials** → click your **OAuth 2.0 Web Client**.
+        3. Under **Authorized redirect URIs**, add:
+           - Local: `http://localhost:8501/oauth2callback`
+           - Cloud: `https://pomodoro-streamlit.streamlit.app/oauth2callback` (replace with your exact app URL)
+        4. Copy your **Client ID** and **Client Secret** into your secrets (in `.streamlit/secrets.toml` or Streamlit Cloud Secrets):
+        """)
+        st.code("""[auth]
+redirect_uri = "http://localhost:8501/oauth2callback"
+cookie_secret = "a-random-32-character-secret-key-12345"
+
+[auth.google]
+client_id = "YOUR_CLIENT_ID.apps.googleusercontent.com"
+client_secret = "YOUR_CLIENT_SECRET"
+server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+""", language="toml")
+
+        st.markdown("---")
+        st.markdown("**Immediate Local Test Login:**")
+        col_n, col_e = st.columns(2)
+        with col_n:
+            dev_name = st.text_input("Display Name", value="Zen Focus Master", key="dlg_dev_name")
+        with col_e:
+            dev_email = st.text_input("Email", value="user@example.com", key="dlg_dev_email")
+        if st.button("🚀 Sign In with Profile", type="primary", use_container_width=True):
+            st.session_state.user = UserProfile(
+                uid=f"user_{dev_name.lower().replace(' ', '_')}",
+                email=dev_email,
+                displayName=dev_name,
+            )
+            st.session_state.settings = LocalStorage.get_settings(user_id=st.session_state.user.uid)
+            st.rerun()
+else:
+    def render_oauth_setup_dialog():
+        st.warning("Please configure [auth.google] in .streamlit/secrets.toml for Google Sign-In.")
+
+
+# Top Header Bar with Native Google Auth Integration
 header_col1, header_col2 = st.columns([1.1, 2.9])
 with header_col1:
     st.markdown(
@@ -294,11 +352,36 @@ with header_col2:
             st.rerun()
 
     with btn_auth:
-        auth_widget_html = render_firebase_auth_button(
-            user=st.session_state.user,
-            theme_key=active_theme_key,
-        )
-        components.html(auth_widget_html, height=42, scrolling=False)
+        if st.session_state.user:
+            u_name = (st.session_state.user.displayName or st.session_state.user.email or "User").split()[0]
+            with st.popover(f"👤 {u_name}", use_container_width=True):
+                st.markdown(f"**{st.session_state.user.displayName or 'Zen User'}**")
+                if st.session_state.user.email:
+                    st.caption(st.session_state.user.email)
+                if st.session_state.user.photoURL:
+                    st.image(st.session_state.user.photoURL, width=42)
+                st.divider()
+                backend_name = "Cloud Firestore" if StorageEngine.get_active_backend() == "firestore" else "Local SQLite"
+                st.caption(f"💾 Storage: **{backend_name}**")
+                st.caption(f"🆔 UID: `{st.session_state.user.uid[:10]}...`")
+                if st.button("🚪 Sign Out", key="header_sign_out_popover", use_container_width=True):
+                    if hasattr(st, "logout") and hasattr(st, "user") and getattr(st.user, "is_logged_in", False):
+                        try:
+                            st.logout()
+                        except Exception:
+                            pass
+                    st.session_state.user = None
+                    st.session_state.settings = LocalStorage.get_settings(user_id=None)
+                    st.rerun()
+        else:
+            if st.button("🔑 Sign in with Google", key="header_google_auth_btn", type="primary", use_container_width=True):
+                if hasattr(st, "login"):
+                    try:
+                        st.login("google")
+                    except Exception:
+                        render_oauth_setup_dialog()
+                else:
+                    render_oauth_setup_dialog()
 
 
 # Render 3D Flip Clock Component (Precisely fitted to 350px height with zero clipping)
