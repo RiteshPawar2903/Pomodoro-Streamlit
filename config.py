@@ -106,6 +106,31 @@ def _normalize_service_account(raw: Any) -> Optional[Dict[str, Any]]:
     return None
 
 
+def verify_firebase_id_token(id_token: str) -> Optional[Dict[str, Any]]:
+    """Verify a Firebase client ID token and return its decoded claims."""
+    if not id_token:
+        return None
+
+    try:
+        import firebase_admin
+        from firebase_admin import auth, credentials
+
+        try:
+            app = firebase_admin.get_app()
+        except ValueError:
+            service_account = CONFIG.get_firebase_service_account()
+            if service_account:
+                app = firebase_admin.initialize_app(credentials.Certificate(service_account))
+            else:
+                app = firebase_admin.initialize_app()
+
+        return auth.verify_id_token(id_token, app=app)
+    except (ValueError, KeyError, TypeError):
+        return None
+    except Exception:
+        return None
+
+
 @dataclass(frozen=True)
 class AppConfig:
     """Production application configuration with environment variable overrides."""
