@@ -226,7 +226,33 @@ if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {{
                     }}
                 }} catch(err) {{
                     console.error("Sign-in error:", err);
-                    alert("Google Sign-In note: " + (err.message || err));
+                    const frameHost = window.location.hostname || "unknown";
+                    let parentHost = frameHost;
+                    try {{
+                        if (window.parent && window.parent.location) {{
+                            parentHost = window.parent.location.hostname;
+                        }}
+                    }} catch(e) {{
+                        parentHost = "cross-origin-frame";
+                    }}
+
+                    if (err.code === 'auth/unauthorized-domain') {{
+                        alert(
+                            "Firebase Error: auth/unauthorized-domain\\n\\n" +
+                            "Firebase rejected the domain from which the popup was opened.\\n\\n" +
+                            "• Iframe Hostname: " + frameHost + "\\n" +
+                            "• Parent Hostname: " + parentHost + "\\n" +
+                            "• Active Project ID: " + (firebaseConfig.projectId || 'EMPTY') + "\\n" +
+                            "• Auth Domain: " + (firebaseConfig.authDomain || 'EMPTY') + "\\n\\n" +
+                            "How to fix in Firebase Console:\\n" +
+                            "1. Open Firebase Console -> Authentication -> Settings -> Authorized domains\\n" +
+                            "2. Ensure '" + frameHost + "' is added (bare domain name only: no https:// and no port numbers)\\n" +
+                            (parentHost !== frameHost && parentHost !== "cross-origin-frame" ? "3. Also ensure '" + parentHost + "' is added.\\n" : "") +
+                            "3. In Streamlit Secrets, verify authDomain is set to '" + (firebaseConfig.projectId || 'project-id') + ".firebaseapp.com'"
+                        );
+                    }} else {{
+                        alert("Google Sign-In note: " + (err.message || err));
+                    }}
                     render();
                 }}
             }};
